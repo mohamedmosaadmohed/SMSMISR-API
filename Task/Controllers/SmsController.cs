@@ -1,4 +1,4 @@
-﻿using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.Mvc;
 using Task.Models;
 using System.Text.RegularExpressions;
 
@@ -19,38 +19,38 @@ namespace Task.Controllers
                 "c96c511a226d104e40251607398596bc231ffcce63207b67861ef1e94672642e");
         }
         [HttpPost]
-        public async Task<ActionResult> SendSmsAsync(List<string> mobileNumbers, string Message, string language, decimal MaxCost, DateTime sendDate)
+        public async Task<ActionResult> SendSmsMessageSingleOrMultiple(List<string> mobileNumbers, string message, string language, decimal maxCostMustSmsTake, DateTime timeToSendThisSms)
         {
             try
             {
-                if (string.IsNullOrEmpty(Message))
+                if (string.IsNullOrEmpty(message))
                 {
                     return BadRequest("Message cannot be empty");
                 }
-
-                if (MaxCost <= 0)
+                if (maxCostMustSmsTake <= 0)
                 {
                     return BadRequest("Invalid MaxCost");
                 }
 
                 string dateTime = "";
-                if (sendDate != default(DateTime))
+                if (timeToSendThisSms != default(DateTime))
                 {
-                    dateTime = sendDate.ToString("yyyy-MM-ddTHH:mm:ssZ"); // 2023-07-05T10:00:00.00Z
+                    dateTime = timeToSendThisSms.ToString("yyyy-MM-ddTHH:mm:ssZ"); // 2023-07-05T10:00:00.00Z
                 }
                 else
                 {
-                    sendDate = DateTime.Now;
+                    timeToSendThisSms = DateTime.Now;
                 }
 
                 int lang = language.ToLower() == "english" || language.ToLower() == "en" ? 1 : 2;
-                decimal MaxNumberForOneCost = lang == 2 ? 70m : 160m;
-                decimal MaxCharacters = MaxCost * MaxNumberForOneCost;
-                decimal Cost = (mobileNumbers.Count * Message.Length);
-                decimal CostForMessage = Cost / MaxNumberForOneCost;
-                if (MaxCharacters <= Cost)
+                decimal maxCharacterToComputeOneCost = lang == 2 ? 70m : 160m;
+                decimal maxCharacterToThisMessage = maxCostMustSmsTake * maxCharacterToComputeOneCost;
+                decimal characterThisMessageTake = (mobileNumbers.Count * message.Length);
+                decimal costThisMessageTake = characterThisMessageTake / maxCharacterToComputeOneCost;
+                decimal roundNumber = Math.Round(costThisMessageTake, 2);
+                if (maxCharacterToThisMessage <= characterThisMessageTake)
                 {
-                    return BadRequest($"The cost is {CostForMessage} More than MaxCost that You Enter");
+                    return BadRequest($"The cost is {costThisMessageTake} More than MaxCost that You Enter");
                 }
 
                 Regex regex = new Regex(@"^(?:\+2)?01[0125]\d{8}$");
@@ -62,7 +62,7 @@ namespace Task.Controllers
                     }
                 }
 
-                var encodedMessage = Uri.EscapeDataString(Message);
+                var encodedMessage = Uri.EscapeDataString(message);
                 var url = $"https://smsmisr.com/api/SMS/?environment=2&username={_smsConfig.Username}&password={_smsConfig.Password}&sender={_smsConfig.SenderID}&mobile={string.Join(",", mobileNumbers)}&language={lang}&message={encodedMessage}&DelayUntil={dateTime}";
 
                 using (HttpClient client = new HttpClient())
@@ -76,9 +76,9 @@ namespace Task.Controllers
                     {
                         // stored successfull sms in database
                         var mobileNumbersString = string.Join(",", mobileNumbers);
-                        var sms = new SuccessfullyMessage(mobileNumbersString, Message, language, CostForMessage, sendDate);
+                        var sms = new SuccessfullyMessage(mobileNumbersString, message, language, costThisMessageTake, timeToSendThisSms);
                         await sms.InsertIntoDatabaseAsync();
-                        return Ok($"SMS send and stored Successfully and Take {CostForMessage}");
+                        return Ok($"SMS send and stored Successfully and Take {costThisMessageTake}");
                     }
                     else
                     {
@@ -132,3 +132,4 @@ namespace Task.Controllers
         }
     }
 }
+
